@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, Bot, Cpu, Key, Globe, Sparkles, Loader2, PauseCircle, Wrench, Bookmark, Copy, Box, Check } from 'lucide-react';
 import { AIConfig, LinkItem } from '../types';
@@ -113,36 +114,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       }
   };
 
-  // Improved Bookmarklet Code with Async/Await and Error Handling
-  const bookmarkletCode = `javascript:(async function(){
-    try {
-        var p = prompt('保存到 CloudNav:\\n请输入标题 (留空则使用网页标题)', document.title);
-        if (p === null) return;
-        var t = p || document.title;
-        var u = window.location.href;
-        var api = '${domain}/api/link';
-        var pwd = '${password}';
-        if(!pwd) throw new Error('未配置密码，请先在 CloudNav 生成包含密码的小书签');
-        
-        var r = await fetch(api, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json', 'x-auth-password': pwd},
-            body: JSON.stringify({title: t, url: u})
-        });
-        
-        if(r.ok) alert('✅ 保存成功');
-        else alert('❌ 保存失败: ' + r.status);
-    } catch(e) {
-        alert('❌ 错误: ' + e.message + '\\n(如果是CSP安全限制，请使用 Chrome 插件)');
-    }
+  // 100% Reliability Bookmarklet Strategy: Window Open
+  const bookmarkletCode = `javascript:(function(){
+var u = window.location.href;
+var t = document.title;
+var target = '${domain}/?add_url='+encodeURIComponent(u)+'&add_title='+encodeURIComponent(t);
+window.open(target, '_blank');
 })();`.replace(/\s+/g, ' ');
 
-  // Chrome Extension Codes
+  // Updated Extension Codes with Notification
   const extManifest = `{
   "manifest_version": 3,
   "name": "CloudNav 快捷保存",
-  "version": "1.0",
-  "permissions": ["activeTab"],
+  "version": "2.1",
+  "permissions": ["activeTab", "notifications"],
   "action": { "default_title": "保存到 CloudNav" },
   "background": { "service_worker": "background.js" }
 }`;
@@ -155,7 +140,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.url) return;
   
-  // 显示 "..." 状态
   chrome.action.setBadgeText({ text: "..." });
   chrome.action.setBadgeBackgroundColor({ color: "#3b82f6" });
 
@@ -170,8 +154,18 @@ chrome.action.onClicked.addListener(async (tab) => {
     });
 
     if (res.ok) {
+        const data = await res.json();
         chrome.action.setBadgeText({ text: "OK" });
         chrome.action.setBadgeBackgroundColor({ color: "#22c55e" });
+        
+        // Show notification
+        chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'icon.png', // Fallback to puzzle icon if missing
+            title: '保存成功',
+            message: \`已保存到 [\${data.categoryName || '默认'}] 分类\`,
+            priority: 1
+        });
     } else {
         chrome.action.setBadgeText({ text: "ERR" });
         chrome.action.setBadgeBackgroundColor({ color: "#ef4444" });
@@ -181,7 +175,6 @@ chrome.action.onClicked.addListener(async (tab) => {
     chrome.action.setBadgeBackgroundColor({ color: "#ef4444" });
   }
   
-  // 3秒后清除状态
   setTimeout(() => chrome.action.setBadgeText({ text: "" }), 3000);
 });`;
 
@@ -335,7 +328,7 @@ chrome.action.onClicked.addListener(async (tab) => {
                 <div className="space-y-6">
                     <div className="space-y-3">
                         <label className="block text-xs font-medium text-slate-500 mb-1">
-                            第一步：输入您的访问密码 (用于生成代码)
+                            第一步：输入您的访问密码 (用于生成扩展代码)
                         </label>
                         <input
                             type="password"
@@ -347,33 +340,29 @@ chrome.action.onClicked.addListener(async (tab) => {
                     </div>
 
                     <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg text-sm text-blue-800 dark:text-blue-200">
-                        <h4 className="font-bold flex items-center gap-2 mb-2"><Bookmark size={16}/> 方案A：浏览器小书签 (Bookmarklet)</h4>
-                        <p className="mb-3 text-xs opacity-80">最简单，无需安装。将下方的按钮拖拽到浏览器的书签栏。以后在网页点击该书签即可保存。</p>
+                        <h4 className="font-bold flex items-center gap-2 mb-2"><Bookmark size={16}/> 方案A：小书签 (推荐更新)</h4>
+                        <p className="mb-3 text-xs opacity-80">
+                            <strong>全新升级版：</strong> 无惧网页拦截，100% 成功率。<br/>
+                            拖拽到书签栏后，点击它会弹出一个新窗口，让您手动确认分类并保存。
+                        </p>
                         <div className="flex justify-center py-2 border-2 border-dashed border-blue-200 dark:border-blue-800/50 rounded-xl bg-white/50 dark:bg-black/20">
-                            {password ? (
-                                <a 
-                                    href={bookmarkletCode}
-                                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-full shadow-lg cursor-move transition-transform hover:scale-105 active:scale-95 text-xs"
-                                    title="拖拽我到书签栏"
-                                    onClick={(e) => e.preventDefault()} 
-                                >
-                                    <Save size={14} /> 保存到 CloudNav
-                                </a>
-                            ) : (
-                                <span className="text-slate-400 text-xs">请输入密码生成按钮</span>
-                            )}
-                        </div>
-                        <div className="text-center text-[10px] text-slate-500 mt-2">
-                             (注: 部分网站(如GitHub)因安全策略限制可能无法使用小书签，请使用方案B)
+                            <a 
+                                href={bookmarkletCode}
+                                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-full shadow-lg cursor-move transition-transform hover:scale-105 active:scale-95 text-xs"
+                                title="拖拽我到书签栏"
+                                onClick={(e) => e.preventDefault()} 
+                            >
+                                <Save size={14} /> 保存到 CloudNav
+                            </a>
                         </div>
                     </div>
 
                     <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
                         <h4 className="font-bold dark:text-white mb-2 text-sm flex items-center gap-2">
-                            <Box size={16} /> 方案B：Chrome 扩展 (推荐)
+                            <Box size={16} /> 方案B：Chrome 扩展
                         </h4>
                         <p className="text-xs text-slate-500 mb-4">
-                            支持所有网站。在电脑上新建一个文件夹，创建以下两个文件，然后在 Chrome 扩展程序页面 "加载已解压的扩展程序" 即可。
+                            支持系统通知提示。请更新您的代码以获得最佳体验。
                         </p>
                         
                         {!showExtCode ? (

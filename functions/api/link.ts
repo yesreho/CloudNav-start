@@ -1,5 +1,6 @@
+
 interface Env {
-  CLOUDNAV_R2: any;
+  CLOUDNAV_KV: any;
   PASSWORD: string;
 }
 
@@ -34,39 +35,71 @@ export const onRequestPost = async (context: { request: Request; env: Env }) => 
   try {
     const newLinkData = await request.json() as any;
     
-    // Validate input (Relaxed validation to ensure simple requests work)
+    // Validate input
     if (!newLinkData.title || !newLinkData.url) {
         return new Response(JSON.stringify({ error: 'Missing title or url' }), { status: 400, headers: corsHeaders });
     }
 
-    // 2. Fetch current data from R2
-    const object = await env.CLOUDNAV_R2.get('app_data.json');
+    // 2. Fetch current data from KV
+    const currentDataStr = await env.CLOUDNAV_KV.get('app_data');
     let currentData = { links: [], categories: [] };
     
-    if (object) {
-        currentData = await object.json();
+    if (currentDataStr) {
+        currentData = JSON.parse(currentDataStr);
     }
 
-    // 3. Create new link object
+    // 3. Find Best Category
+    // Logic: Look for 'Inbox', 'Unsorted', 'Common' or fall back to first available
+    let targetCatId = 'common';
+    let targetCatName = '常用推荐';
+
+    if (currentData.categories && currentData.categories.length > 0) {
+        // Try to find specific keywords
+        const keywords = ['收集', '未分类', 'inbox', 'temp', 'later'];
+        const match = currentData.categories.find((c: any) => 
+            keywords.some(k => c.name.toLowerCase().includes(k))
+        );
+
+        if (match) {
+            targetCatId = match.id;
+            targetCatName = match.name;
+        } else {
+            // Fallback to 'common' if exists, else first category
+            const common = currentData.categories.find((c: any) => c.id === 'common');
+            if (common) {
+                targetCatId = 'common';
+                targetCatName = common.name;
+            } else {
+                targetCatId = currentData.categories[0].id;
+                targetCatName = currentData.categories[0].name;
+            }
+        }
+    }
+
+    // 4. Create new link object
     const newLink = {
         id: Date.now().toString(),
         title: newLinkData.title,
         url: newLinkData.url,
         description: newLinkData.description || '',
-        categoryId: 'common', // Default to common
+        categoryId: targetCatId, 
         createdAt: Date.now(),
         pinned: false,
         icon: undefined
     };
 
-    // 4. Append
+    // 5. Append
     // @ts-ignore
     currentData.links = [newLink, ...(currentData.links || [])];
 
-    // 5. Save back to R2
-    await env.CLOUDNAV_R2.put('app_data.json', JSON.stringify(currentData));
+    // 6. Save back to KV
+    await env.CLOUDNAV_KV.put('app_data', JSON.stringify(currentData));
 
-    return new Response(JSON.stringify({ success: true, link: newLink }), {
+    return new Response(JSON.stringify({ 
+        success: true, 
+        link: newLink,
+        categoryName: targetCatName 
+    }), {
       headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, Plus, Upload, Moon, Sun, Menu, 
@@ -72,6 +73,8 @@ function App() {
   const [catAuthModalData, setCatAuthModalData] = useState<Category | null>(null);
   
   const [editingLink, setEditingLink] = useState<LinkItem | undefined>(undefined);
+  // State for data pre-filled from Bookmarklet
+  const [prefillLink, setPrefillLink] = useState<Partial<LinkItem> | undefined>(undefined);
   
   // Sync State
   const [syncStatus, setSyncStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -163,6 +166,23 @@ function App() {
         } catch (e) {}
     }
 
+    // Handle URL Params for Bookmarklet (Add Link)
+    const urlParams = new URLSearchParams(window.location.search);
+    const addUrl = urlParams.get('add_url');
+    if (addUrl) {
+        const addTitle = urlParams.get('add_title') || '';
+        // Clean URL params to avoid re-triggering on refresh
+        window.history.replaceState({}, '', window.location.pathname);
+        
+        setPrefillLink({
+            title: addTitle,
+            url: addUrl,
+            categoryId: 'common' // Default, Modal will handle selection
+        });
+        setEditingLink(undefined);
+        setIsModalOpen(true);
+    }
+
     // Initial Data Fetch
     const initData = async () => {
         try {
@@ -246,6 +266,8 @@ function App() {
       createdAt: Date.now()
     };
     updateData([newLink, ...links], categories);
+    // Clear prefill if any
+    setPrefillLink(undefined);
   };
 
   const handleEditLink = (data: Omit<LinkItem, 'id' | 'createdAt'>) => {
@@ -710,10 +732,10 @@ function App() {
 
       <LinkModal
         isOpen={isModalOpen}
-        onClose={() => { setIsModalOpen(false); setEditingLink(undefined); }}
+        onClose={() => { setIsModalOpen(false); setEditingLink(undefined); setPrefillLink(undefined); }}
         onSave={editingLink ? handleEditLink : handleAddLink}
         categories={categories}
-        initialData={editingLink}
+        initialData={editingLink || (prefillLink as LinkItem)}
         aiConfig={aiConfig}
       />
     </div>
